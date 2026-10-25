@@ -3,8 +3,10 @@
 Tells people in Portugal the cheapest hours to use electricity tomorrow, based on the
 OMIE day-ahead market prices that are published every afternoon.
 
-> Status: **Phase 3** – prices are fetched daily by GitHub Actions and the cheapest hours are
-> posted to a Telegram channel. A web page comes next (see [Roadmap](#roadmap)).
+> Status: **Phase 4** – prices are fetched daily by GitHub Actions, the cheapest hours are
+> posted to the Telegram channel [t.me/luz_barata](https://t.me/luz_barata) and published on
+> **[nmmsousa.github.io/luzbarata](https://nmmsousa.github.io/luzbarata/)** with a chart, a JSON
+> API and calendar feeds.
 
 ```text
 $ luzbarata windows --date 2026-10-26 --option tri --cycle weekly
@@ -102,6 +104,10 @@ uv run luzbarata windows --provider g9-smart-index --option bi --cycle daily
 
 # tomorrow's Telegram message (Portuguese); without --dry-run it posts, once per day
 uv run luzbarata post --dry-run
+
+# web page, JSON API and calendar feeds for the last 30 days, into ./site
+uv run luzbarata site
+python -m http.server -d site     # then open http://localhost:8000
 ```
 
 The store location defaults to `./data`; override with `--data-dir` or `LUZBARATA_DATA_DIR`.
@@ -117,9 +123,27 @@ The store location defaults to `./data`; override with `--data-dir` or `LUZBARAT
    (daily cycle) tariffs. Days already posted are listed in `data/telegram_posts.csv`, so a
    rerun never posts twice.
 3. Anything new under `data/` is committed to the repo.
+4. If that pushed a commit, [`pages.yml`](.github/workflows/pages.yml) rebuilds the site and
+   deploys it to GitHub Pages. Code pushes to `main` also redeploy it.
 
 Repo secrets: `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_CHAT_ID` (e.g.
 `@channelname`; the bot must be an admin of the channel).
+
+## Web page and API
+
+`luzbarata site` writes a static site that GitHub Pages serves as is. The page is in Portuguese,
+works without any external scripts, and picks today or tomorrow in the browser (Lisbon time), so
+it only needs rebuilding when new prices arrive.
+
+| Path | Content |
+|---|---|
+| `index.html` | chart of the day in 15-minute slots, cheapest 1h/2h/4h, the 2h to avoid, a tariff picker |
+| `api/v1/index.json` | tariffs (id, option, cycle, formula source) and the days available |
+| `api/v1/days/YYYY-MM-DD.json` | one Lisbon day: slots in UTC with the OMIE price, and per tariff the final price and period of every slot, the day average and the windows |
+| `calendar/<tariff>.ics` | one event per day at the cheapest 2h; UIDs are stable, so events update in place |
+
+Only tariffs whose formula has been checked against the provider's own prices are published
+(Coopérnico Base for now, every option and cycle). Prices are EUR/kWh without VAT.
 
 ## Development
 
@@ -136,7 +160,7 @@ hourly / 15-minute and normal / spring-forward / fall-back days.
 1. ✅ Ingestion: fetch, validate, store, backfill
 2. ✅ Cheapest windows (1h / 2h / 4h) and final price for indexed-tariff providers
 3. ✅ GitHub Actions daily schedule + Telegram channel message
-4. Web page with chart, JSON API and `.ics` calendar feed
+4. ✅ Web page with chart, JSON API and `.ics` calendar feed
 5. Personalisation (provider, tariff schedule), alerts, savings calculator
 
 *Prices shown are estimates for information only. Market data © OMIE.*

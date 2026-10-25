@@ -7,12 +7,13 @@ Saving a day replaces any rows already stored for it, so re-running is safe.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import polars as pl
 
 from luzbarata.omie import PricePeriod
+from luzbarata.tariffs import local_day_bounds
 
 SCHEMA = {
     "delivery_date": pl.Date,
@@ -58,3 +59,23 @@ def load_day(d: date, data_dir: Path) -> pl.DataFrame:
 
 def has_day(d: date, data_dir: Path) -> bool:
     return load_day(d, data_dir).height > 0
+
+
+def stored_days(data_dir: Path) -> list[date]:
+    """Every delivery day in the store, oldest first."""
+    files = sorted((data_dir / "prices").glob("year=*/*.parquet"))
+    if not files:
+        return []
+    days = pl.concat([pl.read_parquet(f, columns=["delivery_date"]) for f in files])
+    return sorted(days["delivery_date"].unique().to_list())
+
+
+def load_local_day(d: date, data_dir: Path) -> pl.DataFrame:
+    """Stored OMIE prices covering calendar day `d` in Lisbon.
+
+    A Lisbon day spans two delivery days: delivery day `d` starts at 23:00 the evening
+    before, and 23:00-24:00 belongs to delivery day `d + 1`.
+    """
+    start, end = local_day_bounds(d)
+    both = pl.concat([load_day(d, data_dir), load_day(d + timedelta(days=1), data_dir)])
+    return both.filter((pl.col("start_utc") >= start) & (pl.col("start_utc") < end))

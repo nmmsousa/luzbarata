@@ -40,7 +40,7 @@ See README.md for how the data works, the price formula and usage.
 
 ## Daily automation (phase 3, live since 2026-10-25)
 
-- Repo: github.com/nmmsousa/luzbarata (private). Channel: t.me/luz_barata (public).
+- Repo: github.com/nmmsousa/luzbarata (public). Channel: t.me/luz_barata (public).
   Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` = `@luz_barata`.
 - CI commits to `main` every day, so `git pull` before starting work.
 - `.github/workflows/daily.yml`: fetch, post, commit `data/`. Channel tariffs are
@@ -51,12 +51,23 @@ See README.md for how the data works, the price formula and usage.
 - The last cron (`LAST_ATTEMPT`) turns "not available" into a failure, which is the
   evening alert. Keep the two in sync.
 - Telegram errors must never include the request URL (it contains the bot token).
-- `astral-sh/setup-uv` has no major-version tag: pin an exact release and bump it by hand.
+- `astral-sh/setup-uv` has no major-version tag: pin an exact release and bump it by hand
+  (in both `daily.yml` and `pages.yml`).
 - Test a workflow change with `gh workflow run daily`; a run on a day already posted is a
   no-op, so it is safe to trigger.
 
-## Next: Phase 4 (web page with chart, JSON API, `.ics` feed)
+## Web page (phase 4)
 
-Not started. Build it from the same data as `luzbarata windows` (`cli.day_summary`). Decide
-with the owner where it is hosted (e.g. GitHub Pages built by the daily workflow; Pages on a
-private repo needs a paid plan) and whether the repo should become public.
+- https://nmmsousa.github.io/luzbarata/. The repo was made public for free Pages (the owner
+  chose this over a separate site repo or Cloudflare). Everything committed is public: never
+  commit secrets or personal data.
+- `site.py` builds a static site (`luzbarata site`); `web/index.html` is the whole page
+  (vanilla JS, inline SVG chart, no external scripts). `SITE_URL` is hard-coded there.
+- `.github/workflows/pages.yml` deploys it. `daily.yml` calls it after pushing new data,
+  because pushes made with `GITHUB_TOKEN` don't trigger other workflows.
+- Only providers in `SITE_PROVIDERS` are published; G9 stays off until the open item above
+  is resolved. The JSON under `api/v1/` is a public API: add fields, don't rename them.
+
+## Next: Phase 5 (personalisation, alerts, savings calculator)
+
+Not started. This is where user data and payments come in, so it needs the legal work first.

@@ -176,3 +176,9 @@ def local_day_bounds(d: date) -> tuple[datetime, datetime]:
     nxt = d + timedelta(days=1)
     end = datetime(nxt.year, nxt.month, nxt.day, tzinfo=LOCAL_TZ)
     return start.astimezone(UTC), end.astimezone(UTC)
+
+
+def local_day_slots(d: date, slot_minutes: int = 15) -> int:
+    """Number of slots in a Lisbon calendar day: 92, 96 or 100 at 15 minutes."""
+    start, end = local_day_bounds(d)
+    return int((end - start).total_seconds()) // (slot_minutes * 60)

@@ -2,6 +2,7 @@
 # OMIE publishes in the early afternoon, so it tries a few times; the last attempt fails the
 # run (GitHub emails the owner) if prices are still missing. Every step is safe to rerun:
 # fetch skips stored days and post skips days listed in data/telegram_posts.csv.
+# When it pushes new data, it calls pages.yml to redeploy the web page.
 name: daily
 
 on:
@@ -27,6 +28,8 @@ jobs:
   daily:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      pushed: ${{ steps.commit.outputs.pushed }}
     steps:
       # The branch tip, not the triggering commit: a run queued behind another must see the
       # post log that run pushed, or it would post the same day again.
@@ -64,6 +67,7 @@ jobs:
 
       # Runs even if posting failed, so fetched prices and the post log are never lost.
       - name: Commit data
+        id: commit
         if: ${{ !cancelled() }}
         run: |
           git add data
@@ -75,7 +79,20 @@ jobs:
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
               commit -m "Update data for $(TZ=Europe/Lisbon date -d tomorrow +%F)"
           for attempt in 1 2 3; do
-            git push && exit 0
+            if git push; then
+              echo "pushed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             git pull --rebase
           done
           exit 1
+
+  # Rebuild the web page whenever new data was pushed, even if posting failed.
+  pages:
+    needs: daily
+    if: ${{ !cancelled() && needs.daily.outputs.pushed == 'true' }}
+    uses: ./.github/workflows/pages.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luz barata</title>
+<meta name="description" content="As horas mais baratas para gastar eletricidade em Portugal, hoje e amanhã, com os preços do mercado OMIE num tarifário indexado.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⚡%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #6b6a65;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --bar: #86b6ef;
+    --bar-strong: #2a78d6;
+    --accent: #1c5cab;
+    --good: #006300;
+    --wash: rgba(42, 120, 214, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #9d9b94;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --bar: #184f95;
+      --bar-strong: #5598e7;
+      --accent: #86b6ef;
+      --good: #0ca30c;
+      --wash: rgba(85, 152, 231, 0.12);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9d9b94;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --bar: #184f95;
+    --bar-strong: #5598e7;
+    --accent: #86b6ef;
+    --good: #0ca30c;
+    --wash: rgba(85, 152, 231, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 0; letter-spacing: -0.01em; }
+  .lede { color: var(--text-secondary); margin: 4px 0 20px; }
+  a { color: var(--accent); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+  .days { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .days button {
+    font: inherit; border: 0; background: none; color: var(--text-secondary);
+    padding: 6px 14px; cursor: pointer;
+  }
+  .days button + button { border-left: 1px solid var(--border); }
+  .days button[aria-pressed="true"] { background: var(--wash); color: var(--text-primary); font-weight: 600; }
+  .days button:disabled { color: var(--text-muted); cursor: default; opacity: 0.6; }
+  select {
+    font: inherit; color: var(--text-primary); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; max-width: 100%;
+  }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .day-title { margin: 0 0 2px; font-size: 1.1rem; }
+  .muted { color: var(--text-muted); font-size: 0.875rem; }
+  .notice { color: var(--text-secondary); font-size: 0.875rem; margin: 8px 0 0; }
+
+  .windows { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0 6px; }
+  @media (max-width: 560px) { .windows { grid-template-columns: repeat(2, 1fr); } }
+  .win {
+    font: inherit; text-align: left; color: inherit; background: none; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  }
+  .win[aria-pressed="true"] { border-color: var(--bar-strong); background: var(--wash); }
+  .win .label { font-size: 0.8rem; color: var(--text-secondary); display: block; }
+  .win .span { font-size: 1.15rem; font-weight: 600; display: block; font-variant-numeric: tabular-nums; }
+  .win .price { font-size: 0.8rem; color: var(--text-secondary); display: block; }
+  .win .pct { color: var(--good); font-weight: 600; }
+
+  .chart-wrap { position: relative; margin-top: 8px; }
+  #chart { display: block; width: 100%; height: 240px; overflow: visible; }
+  #chart:focus { outline: none; }
+  #chart:focus-visible { outline: 2px solid var(--bar-strong); outline-offset: 4px; border-radius: 4px; }
+  #chart text { font-size: 11px; fill: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .tip {
+    position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px; font-size: 0.8rem; white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); transform: translateX(-50%); top: 22px;
+  }
+  .tip strong { display: block; font-size: 0.9rem; }
+  .tip span { color: var(--text-secondary); }
+
+  details summary { cursor: pointer; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 600; }
+  tr.in-window td { background: var(--wash); }
+
+  footer { color: var(--text-secondary); font-size: 0.875rem; }
+  footer h2 { font-size: 1rem; color: var(--text-primary); margin: 24px 0 6px; }
+  footer ul { padding-left: 1.2em; margin: 6px 0; }
+  code { font-size: 0.85em; word-break: break-all; }
+</style>
+</head>
+<body>
+<main>
+  <h1>⚡ Luz barata</h1>
+  <p class="lede">As horas mais baratas para gastar eletricidade em Portugal, num tarifário indexado ao mercado.</p>
+
+  <div class="controls">
+    <div class="days" role="group" aria-label="Dia">
+      <button type="button" id="btn-today" aria-pressed="false">Hoje</button>
+      <button type="button" id="btn-tomorrow" aria-pressed="false">Amanhã</button>
+    </div>
+    <select id="tariff" aria-label="Tarifário"></select>
+  </div>
+
+  <section class="card" id="day" aria-live="polite">
+    <p class="muted" id="status">A carregar preços…</p>
+  </section>
+
+  <footer>
+    <h2>Como ler</h2>
+    <ul>
+      <li>Preço final estimado por kWh, <strong>sem IVA</strong>: preço da energia no tarifário <span id="provider-name">indexado</span> (fórmula sobre o preço OMIE) mais a tarifa de acesso às redes. Hora de Portugal continental.</li>
+      <li>As percentagens comparam com a média do dia. Cada barra é um período de 15 minutos.</li>
+      <li>Os preços de amanhã saem à tarde. As 23:00–24:00 de cada dia só ficam conhecidas com os preços do dia seguinte.</li>
+      <li>Estimativa informativa: o preço na sua fatura pode ser diferente.</li>
+    </ul>
+
+    <h2>Receber todos os dias</h2>
+    <ul>
+      <li>Canal no Telegram: <a href="https://t.me/luz_barata">t.me/luz_barata</a></li>
+      <li>Calendário com as 2 horas mais baratas de cada dia: <a id="ics-link" href="#">subscrever</a> (<a id="ics-file" href="#">ficheiro .ics</a>)</li>
+      <li>Dados em JSON: <a href="api/v1/index.json"><code>api/v1/index.json</code></a></li>
+    </ul>
+
+    <p class="muted" id="sources"></p>
+    <p class="muted">Dados de mercado © OMIE. Projeto independente, sem ligação à OMIE nem aos comercializadores.</p>
+  </footer>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const TZ = "Europe/Lisbon";
+  const PERIODS = { simples: "simples", vazio: "vazio", fora_vazio: "fora de vazio", cheias: "cheias", ponta: "ponta" };
+  const WINDOW_LABELS = { "1h": "1 hora", "2h": "2 horas", "4h": "4 horas" };
+  const fmtPrice = new Intl.NumberFormat("pt-PT", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  const fmtAxis = new Intl.NumberFormat("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtPct = new Intl.NumberFormat("pt-PT", { style: "percent", maximumFractionDigits: 0, signDisplay: "exceptZero" });
+  const fmtTime = new Intl.DateTimeFormat("pt-PT", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const fmtDay = new Intl.DateTimeFormat("pt-PT", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" });
+  const $ = (id) => document.getElementById(id);
+  const SVG = "http://www.w3.org/2000/svg";
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+  };
+
+  // Calendar date in Lisbon, `offset` days from now, as YYYY-MM-DD.
+  function lisbonDate(offset) {
+    const [y, m, d] = new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date()).split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d + offset)).toISOString().slice(0, 10);
+  }
+  const time = (iso) => fmtTime.format(new Date(iso));
+  // The last slot ends at midnight: show 24:00 rather than 00:00.
+  const span = (start, end) => `${time(start)}–${time(end) === "00:00" ? "24:00" : time(end)}`;
+  const euro = (v) => `${fmtPrice.format(v)} €/kWh`;
+
+  const state = { index: null, days: new Map(), date: null, tariff: null, window: "2h", hover: null };
+
+  async function getJSON(url) {
+    const r = await fetch(url, { cache: "no-cache" });
+    if (!r.ok) throw new Error(`${url}: ${r.status}`);
+    return r.json();
+  }
+
+  async function loadDay(date) {
+    if (!state.days.has(date)) {
+      const entry = state.index.days.find((d) => d.date === date);
+      state.days.set(date, await getJSON(entry.url));
+    }
+    return state.days.get(date);
+  }
+
+  function el(tag, attrs = {}, text) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function svgEl(tag, attrs = {}) {
+    const node = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  }
+
+  // Column with a rounded data end and a square baseline; h < 0 draws downwards.
+  function columnPath(x, base, w, h, r) {
+    if (h === 0) return "";
+    const dir = h > 0 ? -1 : 1;
+    const top = base + dir * Math.abs(h);
+    r = Math.min(r, w / 2, Math.abs(h));
+    return `M${x},${base}V${top - dir * r}Q${x},${top} ${x + r},${top}H${x + w - r}Q${x + w},${top} ${x + w},${top - dir * r}V${base}Z`;
+  }
+
+  function niceStep(range) {
+    for (const s of [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1]) if (range / s <= 5) return s;
+    return 1;
+  }
+
+  function selectedWindow(t) {
+    return state.window === "evitar" ? t.priciest_2h : t.cheapest[state.window];
+  }
+
+  function render() {
+    const day = state.days.get(state.date);
+    const t = day.tariffs.find((x) => x.id === state.tariff);
+    const info = state.index.tariffs.find((x) => x.id === state.tariff);
+    const today = lisbonDate(0), tomorrow = lisbonDate(1);
+    const root = $("day");
+    root.replaceChildren();
+
+    const label = state.date === today ? "Hoje" : state.date === tomorrow ? "Amanhã" : "";
+    const dayName = fmtDay.format(new Date(state.date + "T00:00:00Z"));
+    root.append(el("h2", { class: "day-title" }, label ? `${label}, ${dayName}` : dayName));
+    root.append(el("p", { class: "muted" }, `${info.provider_name} · ${info.label} · média do dia ${euro(t.avg_eur_kwh)}`));
+    if (state.date < today) {
+      root.append(el("p", { class: "notice" }, "Ainda não há preços para hoje: a mostrar o último dia disponível."));
+    }
+
+    // Window cards: clicking one highlights it on the chart and in the table.
+    const grid = el("div", { class: "windows" });
+    const options = [...Object.keys(t.cheapest).map((k) => [k, t.cheapest[k], `Mais barato · ${WINDOW_LABELS[k]}`]),
+      ["evitar", t.priciest_2h, "Evitar · 2 horas"]];
+    if (!options.some(([k, w]) => k === state.window && w)) state.window = Object.keys(t.cheapest)[0] || "evitar";
+    for (const [key, w, text] of options) {
+      if (!w) continue;
+      const b = el("button", { type: "button", class: "win", "aria-pressed": String(key === state.window) });
+      b.append(el("span", { class: "label" }, text), el("span", { class: "span" }, span(w.start_utc, w.end_utc)));
+      const price = el("span", { class: "price" }, `${euro(w.avg_eur_kwh)} `);
+      if (key !== "evitar") price.append(el("span", { class: "pct" }, fmtPct.format(w.vs_day_avg)));
+      else price.append(el("span", {}, fmtPct.format(w.vs_day_avg)));
+      b.append(price);
+      b.addEventListener("click", () => { state.window = key; render(); });
+      grid.append(b);
+    }
+    root.append(grid);
+
+    const wrap = el("div", { class: "chart-wrap" });
+    const svg = svgEl("svg", { id: "chart", tabindex: "0", role: "img" });
+    const tip = el("div", { class: "tip", hidden: "" });
+    wrap.append(svg, tip);
+    root.append(wrap);
+    if (day.slots_known < day.slots_expected) {
+      root.append(el("p", { class: "notice" },
+        "As últimas horas do dia ainda não têm preço: saem com os preços do dia seguinte, à tarde."));
+    }
+    root.append(table(day, t));
+    drawChart(svg, tip, day, t);
+  }
+
+  function drawChart(svg, tip, day, t) {
+    const W = svg.clientWidth || 600, H = svg.clientHeight || 240;
+    const m = { top: 24, right: 8, bottom: 24, left: 40 };
+    const pw = W - m.left - m.right, ph = H - m.top - m.bottom;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const w = selectedWindow(t);
+    const dayStart = Date.parse(day.slots[0].start_utc);
+    const slotIndex = (iso) => Math.round((Date.parse(iso) - dayStart) / 900000);
+    const n = day.slots_expected;
+    const band = pw / n;
+    const gap = band >= 6 ? 2 : 1;
+    const barW = Math.max(1, Math.min(24, band - gap));
+
+    const prices = t.price_eur_kwh;
+    const lo = Math.min(0, ...prices), hi = Math.max(...prices);
+    const step = niceStep(hi - lo);
+    const yMin = Math.floor(lo / step) * step, yMax = Math.ceil((hi * 1.05) / step) * step;
+    const y = (v) => m.top + ph * (1 - (v - yMin) / (yMax - yMin));
+
+    const winFrom = w ? slotIndex(w.start_utc) : -1, winTo = w ? slotIndex(w.end_utc) : -1;
+    svg.setAttribute("aria-label", `Preço por período de 15 minutos, de ${fmtAxis.format(Math.min(...prices))} a ${fmtAxis.format(hi)} €/kWh.`
+      + (w ? ` Destacado: ${span(w.start_utc, w.end_utc)}.` : ""));
+
+    for (let v = yMin; v <= yMax + 1e-9; v += step) {
+      svg.append(svgEl("line", { x1: m.left, x2: W - m.right, y1: y(v), y2: y(v), stroke: Math.abs(v) < 1e-9 ? "var(--axis)" : "var(--grid)", "stroke-width": 1, "shape-rendering": "crispEdges" }));
+      const label = svgEl("text", { x: m.left - 6, y: y(v) + 4, "text-anchor": "end" });
+      label.textContent = fmtAxis.format(v);
+      svg.append(label);
+    }
+    const unit = svgEl("text", { x: 0, y: 10 });
+    unit.textContent = "€/kWh";
+    svg.append(unit);
+
+    const tickHours = pw < 480 ? 6 : 3;
+    const bars = svgEl("g");
+    day.slots.forEach((s, i) => {
+      const idx = slotIndex(s.start_utc);
+      const x = m.left + idx * band + (band - barW) / 2;
+      const inWin = idx >= winFrom && idx < winTo;
+      bars.append(svgEl("path", { d: columnPath(x, y(0), barW, y(0) - y(prices[i]), 4), fill: inWin ? "var(--bar-strong)" : "var(--bar)" }));
+      // Hour ticks every 3 (or 6) hours, from local time so DST days label correctly.
+      const local = time(s.start_utc);
+      if (local.endsWith(":00") && Number(local.slice(0, 2)) % tickHours === 0 &&(i === 0 || time(day.slots[i - 1].start_utc) !== local)) {
+        const tick = svgEl("text", { x: m.left + idx * band, y: H - 6, "text-anchor": idx === 0 ? "start" : "middle" });
+        tick.textContent = local.slice(0, 2) + "h";
+        svg.append(tick);
+      }
+    });
+    svg.append(bars);
+
+    // Day average as a hairline with a direct label.
+    const avgY = y(t.avg_eur_kwh);
+    svg.append(svgEl("line", { x1: m.left, x2: W - m.right, y1: avgY, y2: avgY, stroke: "var(--text-muted)", "stroke-width": 1, "shape-rendering": "crispEdges" }));
+    const avgLabel = svgEl("text", { x: W - m.right, y: avgY - 4, "text-anchor": "end" });
+    avgLabel.textContent = "média";
+    svg.append(avgLabel);
+
+    const cross = svgEl("line", { y1: m.top, y2: m.top + ph, stroke: "var(--text-secondary)", "stroke-width": 1, visibility: "hidden" });
+    svg.append(cross);
+
+    function show(i) {
+      if (i === null || i < 0 || i >= day.slots.length) {
+        state.hover = null; tip.hidden = true; cross.setAttribute("visibility", "hidden"); return;
+      }
+      state.hover = i;
+      const s = day.slots[i];
+      const cx = m.left + (slotIndex(s.start_utc) + 0.5) * band;
+      cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
+      const period = t.period[i] === "simples" ? "" : ` · ${PERIODS[t.period[i]]}`;
+      tip.replaceChildren(el("strong", {}, euro(prices[i])), el("span", {}, `${span(s.start_utc, s.end_utc)}${period}`));
+      tip.hidden = false;
+      const half = tip.offsetWidth / 2;
+      tip.style.left = `${Math.min(Math.max(cx, half), W - half)}px`;
+    }
+    const indexAt = (clientX) => {
+      const idx = Math.floor((clientX - svg.getBoundingClientRect().left - m.left) / band);
+      return day.slots.findIndex((s) => slotIndex(s.start_utc) === idx);
+    };
+    svg.addEventListener("pointermove", (e) => show(indexAt(e.clientX)));
+    svg.addEventListener("pointerleave", () => show(null));
+    svg.addEventListener("blur", () => show(null));
+    svg.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const from = state.hover ?? (e.key === "ArrowRight" ? -1 : day.slots.length);
+      show(Math.min(day.slots.length - 1, Math.max(0, from + (e.key === "ArrowRight" ? 1 : -1))));
+    });
+  }
+
+  function table(day, t) {
+    const details = el("details");
+    details.append(el("summary", {}, "Ver todos os preços"));
+    const tbl = el("table");
+    const head = el("tr");
+    const simple = t.period.every((p) => p === "simples");
+    for (const h of ["Hora", "€/kWh", ...(simple ? [] : ["Período"]), "OMIE €/MWh"]) head.append(el("th", { scope: "col" }, h));
+    const thead = el("thead");
+    thead.append(head);
+    tbl.append(thead);
+    const body = el("tbody");
+    const w = selectedWindow(t);
+    day.slots.forEach((s, i) => {
+      const inWin = w && s.start_utc >= w.start_utc && s.start_utc < w.end_utc;
+      const row = el("tr", inWin ? { class: "in-window" } : {});
+      row.append(el("td", {}, span(s.start_utc, s.end_utc)), el("td", {}, fmtPrice.format(t.price_eur_kwh[i])));
+      if (!simple) row.append(el("td", {}, PERIODS[t.period[i]]));
+      row.append(el("td", {}, s.omie_eur_mwh.toFixed(2).replace(".", ",")));
+      body.append(row);
+    });
+    tbl.append(body);
+    details.append(tbl);
+    return details;
+  }
+
+  function updateControls() {
+    const has = (d) => state.index.days.some((x) => x.date === d);
+    for (const [id, date] of [["btn-today", lisbonDate(0)], ["btn-tomorrow", lisbonDate(1)]]) {
+      const b = $(id);
+      b.disabled = !has(date);
+      b.title = has(date) ? "" : "Preços ainda não publicados";
+      b.setAttribute("aria-pressed", String(state.date === date));
+    }
+    const ics = new URL(`calendar/${state.tariff}.ics`, location.href);
+    $("ics-file").href = ics.href;
+    $("ics-link").href = ics.href.replace(/^https?:/, "webcal:");
+  }
+
+  async function show(date) {
+    state.date = date;
+    await loadDay(date);
+    updateControls();
+    render();
+  }
+
+  async function init() {
+    state.index = await getJSON("api/v1/index.json");
+    const sel = $("tariff");
+    for (const t of state.index.tariffs) sel.append(el("option", { value: t.id }, `${t.provider_name} · ${t.label}`));
+    const saved = store.get("luzbarata.tariff");
+    state.tariff = state.index.tariffs.some((t) => t.id === saved) ? saved : state.index.tariffs[0].id;
+    sel.value = state.tariff;
+    sel.addEventListener("change", () => { state.tariff = sel.value; store.set("luzbarata.tariff", sel.value); updateControls(); render(); });
+    $("btn-today").addEventListener("click", () => show(lisbonDate(0)));
+    $("btn-tomorrow").addEventListener("click", () => show(lisbonDate(1)));
+
+    const first = state.index.tariffs[0];
+    $("provider-name").textContent = first.provider_name;
+    $("sources").textContent = `Fórmula de preço (${first.provider_name}): ${first.formula_source}, verificada a ${first.checked_on}. Atualizado: ${new Date(state.index.generated_at_utc).toLocaleString("pt-PT", { timeZone: TZ })}.`;
+
+    // Tomorrow once published, else today, else the newest day there is.
+    const dates = state.index.days.map((d) => d.date);
+    const pick = [lisbonDate(1), lisbonDate(0)].find((d) => dates.includes(d)) || dates[dates.length - 1];
+    await show(pick);
+
+    let width = window.innerWidth;
+    window.addEventListener("resize", () => { if (window.innerWidth !== width) { width = window.innerWidth; render(); } });
+  }
+
+  init().catch((err) => {
+    console.error(err);
+    $("status").textContent = "Não foi possível carregar os preços. Tente mais tarde.";
+  });
+})();
+</script>
+</body>
+</html>

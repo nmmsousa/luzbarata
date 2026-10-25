@@ -11,7 +11,7 @@ def store(tmp_path, omie_file, *days: date):
 def test_local_day_spans_two_delivery_days(tmp_path, omie_file):
     store(tmp_path, omie_file, date(2026, 10, 25), date(2026, 10, 26))
     # 25 Oct is 25h long in Lisbon: 99 slots from delivery day 25 plus 23:00-24:00 from the 26th.
-    assert cli.load_local_day(date(2026, 10, 25), tmp_path).height == 100
+    assert storage.load_local_day(date(2026, 10, 25), tmp_path).height == 100
 
 
 def test_windows_command(tmp_path, omie_file, capsys):

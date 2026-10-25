@@ -1,4 +1,4 @@
-"""Command line entry point: `luzbarata fetch | backfill | show | windows | post`."""
+"""Command line entry point: `luzbarata fetch | backfill | show | windows | post | site`."""
 
 from __future__ import annotations
 
@@ -11,9 +11,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import httpx
-import polars as pl
 
-from luzbarata import omie, storage, tariffs, telegram, windows
+from luzbarata import omie, site, storage, tariffs, telegram, windows
 from luzbarata.omie import LOCAL_TZ
 
 log = logging.getLogger("luzbarata")
@@ -35,19 +34,6 @@ def tomorrow(tz=omie.MARKET_TZ) -> date:
     return datetime.now(tz).date() + timedelta(days=1)
 
 
-def load_local_day(d: date, data_dir: Path) -> pl.DataFrame:
-    """Stored OMIE prices covering calendar day `d` in Lisbon.
-
-    A Lisbon day spans two delivery days: delivery day `d` starts at 23:00 the evening
-    before, and 23:00-24:00 belongs to delivery day `d + 1`.
-    """
-    start, end = tariffs.local_day_bounds(d)
-    both = pl.concat(
-        [storage.load_day(d, data_dir), storage.load_day(d + timedelta(days=1), data_dir)]
-    )
-    return both.filter((pl.col("start_utc") >= start) & (pl.col("start_utc") < end))
-
-
 def day_summary(
     d: date,
     provider: tariffs.Provider,
@@ -56,13 +42,11 @@ def day_summary(
     data_dir: Path,
 ) -> windows.DaySummary | None:
     """Cheapest windows on Lisbon day `d`, or None if no prices are stored for it."""
-    omie_prices = load_local_day(d, data_dir)
+    omie_prices = storage.load_local_day(d, data_dir)
     if omie_prices.is_empty():
         return None
     prices = tariffs.final_prices(omie_prices, provider, option, cycle)
-    start, end = tariffs.local_day_bounds(d)
-    expected = int((end - start).total_seconds()) // (windows.SLOT_MINUTES * 60)
-    return windows.summarise(prices, expected)
+    return windows.summarise(prices, tariffs.local_day_slots(d, windows.SLOT_MINUTES))
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -189,6 +173,16 @@ def cmd_post(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_site(args: argparse.Namespace) -> int:
+    try:
+        days = site.build(args.out, args.data_dir, args.days)
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 1
+    log.info("Built site for %s to %s in %s", days[0], days[-1], args.out)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="luzbarata", description=__doc__)
     parser.add_argument(
@@ -230,6 +224,11 @@ def build_parser() -> argparse.ArgumentParser:
     post.add_argument("--date", type=date.fromisoformat)
     post.add_argument("--dry-run", action="store_true", help="Print the message, don't post")
     post.set_defaults(func=cmd_post)
+
+    web = sub.add_parser("site", help="Build the web page, JSON API and calendar feeds")
+    web.add_argument("--out", type=Path, default=Path("site"), help="Output folder (./site)")
+    web.add_argument("--days", type=int, default=site.DAYS, help="Lisbon days to publish")
+    web.set_defaults(func=cmd_site)
     return parser
 
 
