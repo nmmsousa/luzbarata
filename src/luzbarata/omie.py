@@ -19,6 +19,7 @@ import httpx
 log = logging.getLogger(__name__)
 
 MARKET_TZ = ZoneInfo("Europe/Madrid")
+LOCAL_TZ = ZoneInfo("Europe/Lisbon")
 URL = (
     "https://www.omie.es/es/file-download"
     "?parents%5B0%5D=marginalpdbcpt&filename=marginalpdbcpt_{d:%Y%m%d}.1"
