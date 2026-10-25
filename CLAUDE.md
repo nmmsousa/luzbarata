@@ -38,8 +38,11 @@ See README.md for how the data works, the price formula and usage.
 - ERSE approved new time schedules: each BTN customer moves on a date between 2027-07-01 and
   2027-12-31. `tariffs.py` must support both, chosen per customer, before July 2027.
 
-## Daily automation (phase 3)
+## Daily automation (phase 3, live since 2026-10-25)
 
+- Repo: github.com/nmmsousa/luzbarata (private). Channel: t.me/luz_barata (public).
+  Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` = `@luz_barata`.
+- CI commits to `main` every day, so `git pull` before starting work.
 - `.github/workflows/daily.yml`: fetch, post, commit `data/`. Channel tariffs are
   `CHANNEL_PROVIDER`/`CHANNEL_TARIFFS` in `cli.py`.
 - Never post twice: `post` checks `data/telegram_posts.csv`, and the workflow checks out the
@@ -48,5 +51,12 @@ See README.md for how the data works, the price formula and usage.
 - The last cron (`LAST_ATTEMPT`) turns "not available" into a failure, which is the
   evening alert. Keep the two in sync.
 - Telegram errors must never include the request URL (it contains the bot token).
+- `astral-sh/setup-uv` has no major-version tag: pin an exact release and bump it by hand.
+- Test a workflow change with `gh workflow run daily`; a run on a day already posted is a
+  no-op, so it is safe to trigger.
 
 ## Next: Phase 4 (web page with chart, JSON API, `.ics` feed)
+
+Not started. Build it from the same data as `luzbarata windows` (`cli.day_summary`). Decide
+with the owner where it is hosted (e.g. GitHub Pages built by the daily workflow; Pages on a
+private repo needs a paid plan) and whether the repo should become public.
