@@ -416,8 +416,9 @@
   }
 
   async function show(date) {
-    state.date = date;
+    // Switch only once loaded: a click while the day is loading must not render it.
     await loadDay(date);
+    state.date = date;
     updateControls();
     render();
   }
