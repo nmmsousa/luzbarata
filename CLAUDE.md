@@ -38,14 +38,15 @@ See README.md for how the data works, the price formula and usage.
 - ERSE approved new time schedules: each BTN customer moves on a date between 2027-07-01 and
   2027-12-31. `tariffs.py` must support both, chosen per customer, before July 2027.
 
-## Next: Phase 3 (daily automation + Telegram channel)
+## Daily automation (phase 3)
 
-1. GitHub Actions workflow on a schedule in the early afternoon (UTC), a few attempts spread over
-   the afternoon: `luzbarata fetch`; exit 2 means try again later, not a failure.
-2. Commit the Parquet store to the repo from CI (remove `data/` from `.gitignore`; it is ~300 KB
-   for 2026). Commit only when something changed.
-3. Post the daily message to a Telegram channel via the Bot API (`TELEGRAM_BOT_TOKEN`,
-   `TELEGRAM_CHAT_ID` as repo secrets). Never post the same day twice, including on reruns.
-   Format the message from the same data as `luzbarata windows`; keep it in Portuguese.
-4. Decide with the owner which tariff the public channel shows (e.g. simple + bi-hourly daily).
-5. Alert in the workflow if no prices arrive by evening.
+- `.github/workflows/daily.yml`: fetch, post, commit `data/`. Channel tariffs are
+  `CHANNEL_PROVIDER`/`CHANNEL_TARIFFS` in `cli.py`.
+- Never post twice: `post` checks `data/telegram_posts.csv`, and the workflow checks out the
+  branch tip (not the triggering commit) so a queued run sees the log the previous run pushed.
+  Remaining gap: if posting succeeds but the push fails 3 times, the next run posts again.
+- The last cron (`LAST_ATTEMPT`) turns "not available" into a failure, which is the
+  evening alert. Keep the two in sync.
+- Telegram errors must never include the request URL (it contains the bot token).
+
+## Next: Phase 4 (web page with chart, JSON API, `.ics` feed)

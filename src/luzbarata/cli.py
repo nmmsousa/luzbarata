@@ -1,4 +1,4 @@
-"""Command line entry point: `luzbarata fetch | backfill | show | windows`."""
+"""Command line entry point: `luzbarata fetch | backfill | show | windows | post`."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 import polars as pl
 
-from luzbarata import omie, storage, tariffs, windows
+from luzbarata import omie, storage, tariffs, telegram, windows
 from luzbarata.omie import LOCAL_TZ
 
 log = logging.getLogger("luzbarata")
@@ -21,8 +21,14 @@ log = logging.getLogger("luzbarata")
 # Exit code for "not published yet", so a scheduler can tell it apart from a failure.
 EXIT_NOT_AVAILABLE = 2
 
-WINDOW_HOURS = (1, 2, 4)
 OPTION_NAMES = {"simple": "simple", "bi": "bi-hourly", "tri": "tri-hourly"}
+
+# What the public Telegram channel shows: section title -> (option, cycle).
+CHANNEL_PROVIDER = "coopernico-base"
+CHANNEL_TARIFFS: dict[str, tuple[tariffs.Option, tariffs.Cycle]] = {
+    "Tarifa simples": ("simple", "daily"),
+    "Bi-horária (ciclo diário)": ("bi", "daily"),
+}
 
 
 def tomorrow(tz=omie.MARKET_TZ) -> date:
@@ -42,8 +48,28 @@ def load_local_day(d: date, data_dir: Path) -> pl.DataFrame:
     return both.filter((pl.col("start_utc") >= start) & (pl.col("start_utc") < end))
 
 
+def day_summary(
+    d: date,
+    provider: tariffs.Provider,
+    option: tariffs.Option,
+    cycle: tariffs.Cycle,
+    data_dir: Path,
+) -> windows.DaySummary | None:
+    """Cheapest windows on Lisbon day `d`, or None if no prices are stored for it."""
+    omie_prices = load_local_day(d, data_dir)
+    if omie_prices.is_empty():
+        return None
+    prices = tariffs.final_prices(omie_prices, provider, option, cycle)
+    start, end = tariffs.local_day_bounds(d)
+    expected = int((end - start).total_seconds()) // (windows.SLOT_MINUTES * 60)
+    return windows.summarise(prices, expected)
+
+
 def cmd_fetch(args: argparse.Namespace) -> int:
     d = args.date or tomorrow()
+    if not args.force and storage.has_day(d, args.data_dir):
+        log.info("Prices for %s already stored", d)
+        return 0
     try:
         periods = omie.fetch(d)
     except omie.DataNotAvailable as exc:
@@ -102,16 +128,11 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 def cmd_windows(args: argparse.Namespace) -> int:
     d = args.date or tomorrow(LOCAL_TZ)
-    omie_prices = load_local_day(d, args.data_dir)
-    if omie_prices.is_empty():
+    provider = tariffs.providers()[args.provider]
+    s = day_summary(d, provider, args.option, args.cycle, args.data_dir)
+    if s is None:
         print(f"No prices stored for {d}. Run: luzbarata fetch --date {d}")
         return 1
-
-    provider = tariffs.providers()[args.provider]
-    prices = tariffs.final_prices(omie_prices, provider, args.option, args.cycle)
-    start, end = tariffs.local_day_bounds(d)
-    expected = int((end - start).total_seconds()) // (windows.SLOT_MINUTES * 60)
-    avg = prices["price_eur_kwh"].mean()
 
     def span(w: windows.Window) -> str:
         return f"{w.start_utc.astimezone(LOCAL_TZ):%H:%M}-{w.end_utc.astimezone(LOCAL_TZ):%H:%M}"
@@ -120,18 +141,51 @@ def cmd_windows(args: argparse.Namespace) -> int:
     if args.option != "simple":
         tariff += f", {args.cycle} cycle"
     print(f"{provider.name} · {tariff} · {d:%a %d %b %Y} (Lisbon time)")
-    print(f"EUR/kWh without VAT · {prices.height}/{expected} slots known\n")
-    print(f"{'Day average':<20}{'':13}{avg:.4f}")
-    for hours in WINDOW_HOURS:
-        w = windows.best_window(prices, hours * 60)
-        if w:
-            saving = w.avg_price / avg - 1
-            print(f"{f'Cheapest {hours}h':<20}{span(w):<13}{w.avg_price:.4f}  ({saving:+.0%})")
-    w = windows.best_window(prices, 120, cheapest=False)
-    if w:
-        print(f"{'Most expensive 2h':<20}{span(w):<13}{w.avg_price:.4f}")
-    if prices.height < expected:
+    print(f"EUR/kWh without VAT · {s.slots}/{s.expected_slots} slots known\n")
+    print(f"{'Day average':<20}{'':13}{s.avg_price:.4f}")
+    for hours, w in s.cheapest.items():
+        saving = w.avg_price / s.avg_price - 1
+        print(f"{f'Cheapest {hours}h':<20}{span(w):<13}{w.avg_price:.4f}  ({saving:+.0%})")
+    if s.priciest:
+        label = f"Most expensive {windows.PRICIEST_HOURS}h"
+        print(f"{label:<20}{span(s.priciest):<13}{s.priciest.avg_price:.4f}")
+    if s.slots < s.expected_slots:
         print("\nSlots not published yet (23:00-24:00 comes with the next day) are left out.")
+    return 0
+
+
+def cmd_post(args: argparse.Namespace) -> int:
+    d = args.date or tomorrow(LOCAL_TZ)
+    if not args.dry_run and telegram.was_posted(d, args.data_dir):
+        log.info("Message for %s already posted", d)
+        return 0
+    # Delivery day d covers 00:00-23:00 Lisbon; without it there is nothing worth posting.
+    if not storage.has_day(d, args.data_dir):
+        log.warning("No prices stored for %s yet", d)
+        return EXIT_NOT_AVAILABLE
+
+    provider = tariffs.providers()[CHANNEL_PROVIDER]
+    sections = {
+        title: day_summary(d, provider, option, cycle, args.data_dir)
+        for title, (option, cycle) in CHANNEL_TARIFFS.items()
+    }
+    text = telegram.format_message(d, provider.name, sections)
+    if args.dry_run:
+        print(text)
+        return 0
+
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        log.error("Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to post")
+        return 1
+    try:
+        message_id = telegram.send_message(token, chat_id, text)
+    except telegram.TelegramError as exc:
+        log.error("%s", exc)
+        return 1
+    telegram.record_post(d, message_id, args.data_dir)
+    log.info("Posted message %d for %s", message_id, d)
     return 0
 
 
@@ -147,6 +201,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     fetch = sub.add_parser("fetch", help="Download one delivery day (default: tomorrow)")
     fetch.add_argument("--date", type=date.fromisoformat)
+    fetch.add_argument("--force", action="store_true", help="Re-download if already stored")
     fetch.set_defaults(func=cmd_fetch)
 
     backfill = sub.add_parser("backfill", help="Download a range of days, skipping stored ones")
@@ -168,6 +223,13 @@ def build_parser() -> argparse.ArgumentParser:
     win.add_argument("--option", choices=tariffs.OPTIONS, default="simple")
     win.add_argument("--cycle", choices=tariffs.CYCLES, default="daily")
     win.set_defaults(func=cmd_windows)
+
+    post = sub.add_parser(
+        "post", help="Post a Lisbon day's cheapest hours to Telegram, once (default: tomorrow)"
+    )
+    post.add_argument("--date", type=date.fromisoformat)
+    post.add_argument("--dry-run", action="store_true", help="Print the message, don't post")
+    post.set_defaults(func=cmd_post)
     return parser
 
 

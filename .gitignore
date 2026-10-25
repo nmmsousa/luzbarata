@@ -4,6 +4,3 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 dist/
-
-# Local price store (will be published by CI in a later phase)
-data/

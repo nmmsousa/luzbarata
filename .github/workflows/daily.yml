@@ -1,0 +1,80 @@
+# Fetch tomorrow's OMIE prices, commit the store and post the cheapest hours to Telegram.
+# OMIE publishes in the early afternoon, so it tries a few times; the last attempt fails the
+# run (GitHub emails the owner) if prices are still missing. Every step is safe to rerun:
+# fetch skips stored days and post skips days listed in data/telegram_posts.csv.
+name: daily
+
+on:
+  schedule:
+    - cron: "15 12 * * *"
+    - cron: "15 13 * * *"
+    - cron: "45 14 * * *"
+    - cron: "45 16 * * *"
+    - cron: "15 19 * * *" # last attempt, keep in sync with LAST_ATTEMPT below
+  workflow_dispatch:
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  LAST_ATTEMPT: "15 19 * * *"
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # The branch tip, not the triggering commit: a run queued behind another must see the
+      # post log that run pushed, or it would post the same day again.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: astral-sh/setup-uv@v10
+
+      - run: uv sync --locked
+
+      - name: Fetch tomorrow's prices
+        id: fetch
+        run: |
+          code=0
+          uv run luzbarata fetch || code=$?
+          if [ "$code" -eq 2 ]; then
+            if [ "${{ github.event.schedule }}" = "$LAST_ATTEMPT" ]; then
+              echo "::error::No OMIE prices for tomorrow by the last attempt of the day"
+              exit 1
+            fi
+            echo "::notice::Prices not published yet, will try again later"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit "$code"
+
+      - name: Post to Telegram
+        if: steps.fetch.outputs.available != 'false'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: uv run luzbarata post
+
+      # Runs even if posting failed, so fetched prices and the post log are never lost.
+      - name: Commit data
+        if: ${{ !cancelled() }}
+        run: |
+          git add data
+          if git diff --cached --quiet; then
+            echo "Nothing changed"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Update data for $(TZ=Europe/Lisbon date -d tomorrow +%F)"
+          for attempt in 1 2 3; do
+            git push && exit 0
+            git pull --rebase
+          done
+          exit 1

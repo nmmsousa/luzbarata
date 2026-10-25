@@ -38,3 +38,13 @@ def test_windows_command_notes_missing_evening(tmp_path, omie_file, capsys):
 
 def test_windows_command_without_data(tmp_path, capsys):
     assert cli.main(["--data-dir", str(tmp_path), "windows", "--date", "2026-10-26"]) == 1
+
+
+def test_fetch_skips_stored_day(tmp_path, omie_file, monkeypatch):
+    store(tmp_path, omie_file, date(2026, 10, 26))
+
+    def no_download(d):
+        raise AssertionError("should not download a stored day")
+
+    monkeypatch.setattr(omie, "fetch", no_download)
+    assert cli.main(["--data-dir", str(tmp_path), "fetch", "--date", "2026-10-26"]) == 0

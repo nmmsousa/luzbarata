@@ -3,8 +3,8 @@
 Tells people in Portugal the cheapest hours to use electricity tomorrow, based on the
 OMIE day-ahead market prices that are published every afternoon.
 
-> Status: **Phase 2** – price ingestion, final prices for indexed tariffs, and cheapest windows.
-> Telegram channel and web page come next (see [Roadmap](#roadmap)).
+> Status: **Phase 3** – prices are fetched daily by GitHub Actions and the cheapest hours are
+> posted to a Telegram channel. A web page comes next (see [Roadmap](#roadmap)).
 
 ```text
 $ luzbarata windows --date 2026-10-26 --option tri --cycle weekly
@@ -92,16 +92,34 @@ Requires [uv](https://docs.astral.sh/uv/).
 ```bash
 uv sync
 
-uv run luzbarata fetch                      # tomorrow (exit 2 if not published yet)
+uv run luzbarata fetch                      # tomorrow (exit 2 if not published yet; skips stored days, --force re-downloads)
 uv run luzbarata fetch --date 2026-10-26
 uv run luzbarata backfill 2024-01-01 2026-10-26   # skips days already stored, 1s between requests
 uv run luzbarata show --date 2026-10-26     # prices in Lisbon time
 
 # cheapest 1h/2h/4h on a Lisbon day (default: tomorrow)
 uv run luzbarata windows --provider g9-smart-index --option bi --cycle daily
+
+# tomorrow's Telegram message (Portuguese); without --dry-run it posts, once per day
+uv run luzbarata post --dry-run
 ```
 
 The store location defaults to `./data`; override with `--data-dir` or `LUZBARATA_DATA_DIR`.
+
+## Daily automation
+
+[`.github/workflows/daily.yml`](.github/workflows/daily.yml) runs five times each afternoon
+(UTC). Each run:
+
+1. `luzbarata fetch` gets tomorrow's prices. Exit 2 (not published yet) is fine, except on the
+   19:15 UTC attempt, where it fails the run so GitHub emails the owner.
+2. `luzbarata post` sends the message to the channel: Coopérnico Base, simple and bi-hourly
+   (daily cycle) tariffs. Days already posted are listed in `data/telegram_posts.csv`, so a
+   rerun never posts twice.
+3. Anything new under `data/` is committed to the repo.
+
+Repo secrets: `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_CHAT_ID` (e.g.
+`@channelname`; the bot must be an admin of the channel).
 
 ## Development
 
@@ -117,7 +135,7 @@ hourly / 15-minute and normal / spring-forward / fall-back days.
 
 1. ✅ Ingestion: fetch, validate, store, backfill
 2. ✅ Cheapest windows (1h / 2h / 4h) and final price for indexed-tariff providers
-3. GitHub Actions daily schedule + Telegram channel message
+3. ✅ GitHub Actions daily schedule + Telegram channel message
 4. Web page with chart, JSON API and `.ics` calendar feed
 5. Personalisation (provider, tariff schedule), alerts, savings calculator
 

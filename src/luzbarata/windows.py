@@ -40,3 +40,30 @@ def best_window(prices: pl.DataFrame, minutes: int, cheapest: bool = True) -> Wi
         if best is None or (avg < best.avg_price if cheapest else avg > best.avg_price):
             best = Window(starts[i], ends[i + n - 1], avg)
     return best
+
+
+@dataclass(frozen=True)
+class DaySummary:
+    """What `luzbarata windows` and the daily message show for one Lisbon day."""
+
+    avg_price: float
+    cheapest: dict[int, Window]  # hours -> window; durations with no full run are left out
+    priciest: Window | None  # most expensive PRICIEST_HOURS block
+    slots: int
+    expected_slots: int
+
+
+CHEAPEST_HOURS = (1, 2, 4)
+PRICIEST_HOURS = 2
+
+
+def summarise(prices: pl.DataFrame, expected_slots: int) -> DaySummary:
+    """Summary of final prices (see tariffs.final_prices) for one day."""
+    cheapest = {h: w for h in CHEAPEST_HOURS if (w := best_window(prices, h * 60))}
+    return DaySummary(
+        avg_price=prices["price_eur_kwh"].mean(),
+        cheapest=cheapest,
+        priciest=best_window(prices, PRICIEST_HOURS * 60, cheapest=False),
+        slots=prices.height,
+        expected_slots=expected_slots,
+    )
