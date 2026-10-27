@@ -1,12 +1,50 @@
 # luzbarata ⚡
 
+[![ci](https://github.com/nmmsousa/luzbarata/actions/workflows/ci.yml/badge.svg)](https://github.com/nmmsousa/luzbarata/actions/workflows/ci.yml)
+[![daily](https://github.com/nmmsousa/luzbarata/actions/workflows/daily.yml/badge.svg)](https://github.com/nmmsousa/luzbarata/actions/workflows/daily.yml)
+![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Tells people in Portugal the cheapest hours to use electricity tomorrow, based on the
 OMIE day-ahead market prices that are published every afternoon.
 
-> Status: **Phase 4** – prices are fetched daily by GitHub Actions, the cheapest hours are
-> posted to the Telegram channel [t.me/luz_barata](https://t.me/luz_barata) and published on
-> **[nmmsousa.github.io/luzbarata](https://nmmsousa.github.io/luzbarata/)** with a chart, a JSON
-> API and calendar feeds.
+**Live:** [nmmsousa.github.io/luzbarata](https://nmmsousa.github.io/luzbarata/) ·
+**Telegram:** [t.me/luz_barata](https://t.me/luz_barata) ·
+**API:** [`api/v1/index.json`](https://nmmsousa.github.io/luzbarata/api/v1/index.json)
+
+[![Web page showing today's prices in 15-minute slots and the cheapest 1h, 2h and 4h windows](docs/screenshot.png)](https://nmmsousa.github.io/luzbarata/)
+
+## Highlights
+
+- **Runs itself, at no cost.** GitHub Actions fetches prices every afternoon, posts to Telegram,
+  commits the data and redeploys the static site on GitHub Pages. There is no server.
+- **Handles awkward time data.** Market days are in Madrid time, the page is in Lisbon time,
+  days have 92, 96 or 100 quarter-hours around daylight saving, and the files switched from
+  hourly to 15-minute periods in October 2025. Tests use real OMIE files for every case.
+- **Prices checked against a primary source.** Every tariff constant in
+  [`tariffs.toml`](src/luzbarata/tariffs.toml) records its source and the date it was checked.
+  The Coopérnico formula reproduces the provider's own price table to 4 decimal places.
+- **Safe to rerun.** Fetching skips stored days, saving replaces a whole day atomically, and the
+  Telegram post is logged so a retried run never posts twice.
+- **Public data products.** A versioned JSON API and `.ics` calendar feeds alongside the page,
+  built with vanilla JS and an inline SVG chart (no external scripts).
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    omie[(OMIE<br/>day-ahead prices)] -->|fetch, validate| store[(Parquet store<br/>data/)]
+    store --> tariffs[Tariff formula<br/>+ network access tariff]
+    tariffs --> windows[Cheapest 1h / 2h / 4h]
+    windows --> tg[Telegram channel]
+    windows --> site[Static site<br/>page · JSON API · .ics]
+    cron{{GitHub Actions<br/>daily schedule}} -.runs.-> omie
+    site --> pages[GitHub Pages]
+```
+
+Python 3.12 · httpx · Polars · Parquet · pytest · ruff · uv · GitHub Actions · GitHub Pages
+
+## Example
 
 ```text
 $ luzbarata windows --date 2026-10-26 --option tri --cycle weekly
@@ -155,12 +193,20 @@ uv run ruff check . && uv run ruff format --check .
 Tests run against real OMIE files saved in `tests/fixtures/`, covering every combination of
 hourly / 15-minute and normal / spring-forward / fall-back days.
 
-## Roadmap
+## Project history
+
+Built in four phases, each live before the next started:
 
 1. ✅ Ingestion: fetch, validate, store, backfill
 2. ✅ Cheapest windows (1h / 2h / 4h) and final price for indexed-tariff providers
 3. ✅ GitHub Actions daily schedule + Telegram channel message
 4. ✅ Web page with chart, JSON API and `.ics` calendar feed
-5. Personalisation (provider, tariff schedule), alerts, savings calculator
 
-*Prices shown are estimates for information only. Market data © OMIE.*
+The repo gets one data commit a day from the `daily` workflow; that is the automation at work.
+
+**Future work:** personalisation (provider, tariff schedule), alerts and a savings calculator.
+
+## License
+
+Code under the [MIT License](LICENSE). Market data © OMIE; this project is independent and not
+affiliated with OMIE or any electricity provider. Prices shown are estimates for information only.
